@@ -32,7 +32,7 @@ import imgui.ImGui.popStyleVar
 import imgui.ImGui.pushStyleVar
 import imgui.ImGui.selectable
 import imgui.ImGui.setNavIDWithRectRel
-import imgui.ImGui.setNavId
+import imgui.ImGui.setNavID
 import imgui.ImGui.setNextWindowPos
 import imgui.ImGui.setNextWindowSizeConstraints
 import imgui.ImGui.style
@@ -62,16 +62,19 @@ fun navUpdate() {
     val navKeyboardActive = io.configFlags has ConfigFlag.NavEnableKeyboard
     val navGamepadActive = io.configFlags has ConfigFlag.NavEnableGamepad && io.backendFlags has BackendFlag.HasGamepad
 
-    if (navGamepadActive)
-        if (g.io.navInputs[NavInput.Activate] > 0f || g.io.navInputs[NavInput.Input] > 0f ||
-                g.io.navInputs[NavInput.Cancel] > 0f || g.io.navInputs[NavInput.Menu] > 0f)
-            g.navInputSource = InputSource.NavGamepad
+    if (navGamepadActive && g.navInputSource != InputSource.NavGamepad)
+        io.navInputs.also {
+            if (it[NavInput.Activate] > 0f || it[NavInput.Input] > 0f || it[NavInput.Cancel] > 0f || it[NavInput.Menu] > 0f
+                || it[NavInput.DpadLeft] > 0f || it[NavInput.DpadRight] > 0f || it[NavInput.DpadUp] > 0f || it[NavInput.DpadDown] > 0f
+            )
+                g.navInputSource = InputSource.NavGamepad
+        }
 
     // Update Keyboard->Nav inputs mapping
     if (navKeyboardActive) {
         fun navMapKey(key: Key, navInput: NavInput) {
-            if (isKeyDown(g.io.keyMap[key])) {
-                g.io.navInputs[navInput] = 1f
+            if (isKeyDown(io.keyMap[key])) {
+                io.navInputs[navInput] = 1f
                 g.navInputSource = InputSource.NavKeyboard
             }
         }
@@ -98,18 +101,8 @@ fun navUpdate() {
         }
 
     // Process navigation init request (select first/default focus)
-    // In very rare cases g.NavWindow may be null (e.g. clearing focus after requesting an init request, which does happen when releasing Alt while clicking on void)
     if (g.navInitResultId != 0 && (!g.navDisableHighlight || g.navInitRequestFromMove))
-        g.navWindow?.let { nav ->
-            /*  Apply result from previous navigation init request (will typically select the first item,
-                unless setItemDefaultFocus() has been called)         */
-            //IMGUI_DEBUG_LOG("[Nav] Apply NavInitRequest result: 0x%08X Layer %d in \"%s\"\n", g.NavInitResultId, g.NavLayer, g.NavWindow->Name);
-            if (g.navInitRequestFromMove)
-                setNavIDWithRectRel(g.navInitResultId, g.navLayer, 0, g.navInitResultRectRel)
-            else
-                setNavId(g.navInitResultId, g.navLayer, 0)
-            nav.navRectRel[g.navLayer] = g.navInitResultRectRel
-        }
+        navUpdateInitResult()
     g.navInitRequest = false
     g.navInitRequestFromMove = false
     g.navInitResultId = 0
@@ -158,6 +151,7 @@ fun navUpdate() {
 
     // Process NavCancel input (to close a popup, get back to parent, clear focus)
     if (NavInput.Cancel.isTest(InputReadMode.Pressed)) {
+        IMGUI_DEBUG_LOG_NAV("[nav] ImGuiNavInput_Cancel")
         if (g.activeId != 0) {
             if (!isActiveIdUsingNavInput(NavInput.Cancel))
                 clearActiveID()
@@ -167,7 +161,7 @@ fun navUpdate() {
             val parentWindow = childWindow.parentWindow!!
             assert(childWindow.childId != 0)
             focusWindow(parentWindow)
-            setNavId(childWindow.childId, NavLayer.Main, 0)
+            setNavID(childWindow.childId, NavLayer.Main, 0)
             // Reassigning with same value, we're being explicit here.
             g.navIdIsAlive = false  // -V1048
             if (g.navDisableMouseHover)
@@ -225,19 +219,31 @@ fun navUpdate() {
         g.navWindow?.let {
             if (g.navWindowingTarget == null && it.flags hasnt Wf.NoNavInputs) {
                 val readMode = InputReadMode.Repeat
-                if (!isActiveIdUsingNavDir(Dir.Left) && (NavInput.DpadLeft.isTest(readMode) || NavInput._KeyLeft.isTest(readMode))) g.navMoveDir = Dir.Left
-                if (!isActiveIdUsingNavDir(Dir.Right) && (NavInput.DpadRight.isTest(readMode) || NavInput._KeyRight.isTest(readMode))) g.navMoveDir = Dir.Right
-                if (!isActiveIdUsingNavDir(Dir.Up) && (NavInput.DpadUp.isTest(readMode) || NavInput._KeyUp.isTest(readMode))) g.navMoveDir = Dir.Up
-                if (!isActiveIdUsingNavDir(Dir.Down) && (NavInput.DpadDown.isTest(readMode) || NavInput._KeyDown.isTest(readMode))) g.navMoveDir = Dir.Down
+                if (!isActiveIdUsingNavDir(Dir.Left) && (NavInput.DpadLeft.isTest(readMode) || NavInput._KeyLeft.isTest(
+                        readMode
+                    ))
+                ) g.navMoveDir = Dir.Left
+                if (!isActiveIdUsingNavDir(Dir.Right) && (NavInput.DpadRight.isTest(readMode) || NavInput._KeyRight.isTest(
+                        readMode
+                    ))
+                ) g.navMoveDir = Dir.Right
+                if (!isActiveIdUsingNavDir(Dir.Up) && (NavInput.DpadUp.isTest(readMode) || NavInput._KeyUp.isTest(
+                        readMode
+                    ))
+                ) g.navMoveDir = Dir.Up
+                if (!isActiveIdUsingNavDir(Dir.Down) && (NavInput.DpadDown.isTest(readMode) || NavInput._KeyDown.isTest(
+                        readMode
+                    ))
+                ) g.navMoveDir = Dir.Down
             }
         }
         g.navMoveDir = g.navMoveDir
     } else {
-        /*  Forwarding previous request (which has been modified, e.g. wrap around menus rewrite the requests with
-            a starting rectangle at the other side of the window)
-            (Preserve g.NavMoveRequestFlags, g.NavMoveClipDir which were set by the NavMoveRequestForward() function) */
+        // Forwarding previous request (which has been modified, e.g. wrap around menus rewrite the requests with a starting rectangle at the other side of the window)
+        // (Preserve g.NavMoveRequestFlags, g.NavMoveClipDir which were set by the NavMoveRequestForward() function)
         assert(g.navMoveDir != Dir.None && g.navMoveDir != Dir.None)
         assert(g.navMoveRequestForward == NavForward.ForwardQueued)
+        IMGUI_DEBUG_LOG_NAV("[nav] NavMoveRequestForward ${g.navMoveDir.i}")
         g.navMoveRequestForward = NavForward.ForwardActive
     }
 
@@ -248,15 +254,14 @@ fun navUpdate() {
         else -> 0f
     }
 
-    /*  If we initiate a movement request and have no current navId, we initiate a InitDefautRequest that will be used
-        as a fallback if the direction fails to find a match     */
+    // If we initiate a movement request and have no current NavId, we initiate a InitDefautRequest that will be used as a fallback if the direction fails to find a match
     if (g.navMoveDir != Dir.None) {
         g.navMoveRequest = true
         g.navMoveRequestKeyMods = io.keyMods
         g.navMoveDirLast = g.navMoveDir
     }
     if (g.navMoveRequest && g.navId == 0) {
-        //IMGUI_DEBUG_LOG("[Nav] NavInitRequest from move, window \"%s\", layer=%d\n", g.NavWindow->Name, g.NavLayer);
+        IMGUI_DEBUG_LOG_NAV("[nav] NavInitRequest: from move, window \"${g.navWindow!!.name}\", layer=${g.navLayer}")
         g.navInitRequest = true
         g.navInitRequestFromMove = true
         // Reassigning with same value, we're being explicit here.
@@ -270,7 +275,8 @@ fun navUpdate() {
 
         if (it.flags hasnt Wf.NoNavInputs && g.navWindowingTarget == null) {
             // *Fallback* manual-scroll with Nav directional keys when window has no navigable item
-            val scrollSpeed = round(it.calcFontSize() * 100 * io.deltaTime) // We need round the scrolling speed because sub-pixel scroll isn't reliably supported.
+            val scrollSpeed =
+                round(it.calcFontSize() * 100 * io.deltaTime) // We need round the scrolling speed because sub-pixel scroll isn't reliably supported.
             if (it.dc.navLayerActiveMask == 0 && it.dc.navHasScroll && g.navMoveRequest) {
                 if (g.navMoveDir == Dir.Left || g.navMoveDir == Dir.Right)
                     it setScrollX floor(it.scroll.x + (if (g.navMoveDir == Dir.Left) -1f else 1f) * scrollSpeed)
@@ -281,14 +287,10 @@ fun navUpdate() {
             // *Normal* Manual scroll with NavScrollXXX keys
             // Next movement request will clamp the NavId reference rectangle to the visible area, so navigation will resume within those bounds.
             val scrollDir = getNavInputAmount2d(NavDirSourceFlag.PadLStick.i, InputReadMode.Down, 1f / 10f, 10f)
-            if (scrollDir.x != 0f && it.scrollbar.x) {
+            if (scrollDir.x != 0f && it.scrollbar.x)
                 it setScrollX floor(it.scroll.x + scrollDir.x * scrollSpeed)
-                g.navMoveFromClampedRefRect = true
-            }
-            if (scrollDir.y != 0f) {
+            if (scrollDir.y != 0f)
                 it setScrollY floor(it.scroll.y + scrollDir.y * scrollSpeed)
-                g.navMoveFromClampedRefRect = true
-            }
         }
     }
 
@@ -297,26 +299,29 @@ fun navUpdate() {
     g.navMoveResultLocalVisibleSet.clear()
     g.navMoveResultOther.clear()
 
-    // When we have manually scrolled (without using navigation) and NavId becomes out of bounds, we project its bounding box to the visible area to restart navigation within visible items
-    if (g.navMoveRequest && g.navMoveFromClampedRefRect && g.navLayer == NavLayer.Main) {
+    // When using gamepad, we project the reference nav bounding box into window visible area.
+    // This is to allow resuming navigation inside the visible area after doing a large amount of scrolling, since with gamepad every movements are relative
+    // (can't focus a visible object like we can with the mouse).
+    if (g.navMoveRequest && g.navInputSource == InputSource.NavGamepad && g.navLayer == NavLayer.Main) {
         val window = g.navWindow!!
         val windowRectRel = Rect(window.innerRect.min - window.pos - 1, window.innerRect.max - window.pos + 1)
         if (window.navRectRel[g.navLayer] !in windowRectRel) {
+            IMGUI_DEBUG_LOG_NAV("[nav] NavMoveRequest: clamp NavRectRel")
             val pad = window.calcFontSize() * 0.5f
-            windowRectRel expand Vec2(-min(windowRectRel.width, pad), -min(windowRectRel.height, pad)) // Terrible approximation for the intent of starting navigation from first fully visible item
-            window.navRectRel[g.navLayer] clipWith windowRectRel
+            windowRectRel expand Vec2(
+                -min(windowRectRel.width, pad),
+                -min(windowRectRel.height, pad)
+            ) // Terrible approximation for the intent of starting navigation from first fully visible item
+            window.navRectRel[g.navLayer] clipWithFull windowRectRel
             g.navFocusScopeId = 0
             g.navId = 0
         }
-        g.navMoveFromClampedRefRect = false
     }
 
     // For scoring we use a single segment on the left side our current item bounding box (not touching the edge to avoid box overlap with zero-spaced items)
     g.navWindow.let {
-        if (it != null) {
-            val navRectRel = if (!it.navRectRel[g.navLayer].isInverted) Rect(it.navRectRel[g.navLayer]) else Rect(0f, 0f, 0f, 0f)
-            g.navScoringRect.put(navRectRel.min + it.pos, navRectRel.max + it.pos)
-        } else g.navScoringRect put viewportRect
+        val navRectRel = it?.run { Rect(navRectRel[g.navLayer]) } ?: Rect()
+        g.navScoringRect.put(it?.run { Rect(navRectRel.min + it.pos, navRectRel.max + it.pos) } ?: viewportRect)
     }
     g.navScoringRect translateY navScoringRectOffsetY
     g.navScoringRect.min.x = min(g.navScoringRect.min.x + 1f, g.navScoringRect.max.x)
@@ -328,7 +333,11 @@ fun navUpdate() {
     if (IMGUI_DEBUG_NAV_RECTS)
         g.navWindow?.let { nav ->
             for (layer in 0..1)
-                getForegroundDrawList(nav).addRect(nav.pos + nav.navRectRel[layer].min, nav.pos + nav.navRectRel[layer].max, COL32(255, 200, 0, 255))  // [DEBUG]
+                getForegroundDrawList(nav).addRect(
+                    nav.pos + nav.navRectRel[layer].min,
+                    nav.pos + nav.navRectRel[layer].max,
+                    COL32(255, 200, 0, 255)
+                )  // [DEBUG]
             val col = if (!nav.hidden) COL32(255, 0, 255, 255) else COL32(255, 0, 0, 255)
             val p = navCalcPreferredRefPos()
             val buf = "${g.navLayer}".toByteArray()
@@ -346,10 +355,9 @@ fun navUpdateWindowing() {
     var applyToggleLayer = false
 
     val modalWindow = topMostPopupModal
-    if (modalWindow != null) {
+    val allowWindowing = modalWindow == null
+    if (!allowWindowing)
         g.navWindowingTarget = null
-        return
-    }
 
     // Fade out
     if (g.navWindowingTargetAnim != null && g.navWindowingTarget == null) {
@@ -358,8 +366,8 @@ fun navUpdateWindowing() {
             g.navWindowingTargetAnim = null
     }
     // Start CTRL-TAB or Square+L/R window selection
-    val startWindowingWithGamepad = g.navWindowingTarget == null && NavInput.Menu.isTest(InputReadMode.Pressed)
-    val startWindowingWithKeyboard = g.navWindowingTarget == null && io.keyCtrl && Key.Tab.isPressed && io.configFlags has ConfigFlag.NavEnableKeyboard
+    val startWindowingWithGamepad = allowWindowing && g.navWindowingTarget == null && NavInput.Menu.isTest(InputReadMode.Pressed)
+    val startWindowingWithKeyboard = allowWindowing && g.navWindowingTarget == null && io.keyCtrl && Key.Tab.isPressed && io.configFlags has ConfigFlag.NavEnableKeyboard
     if (startWindowingWithGamepad || startWindowingWithKeyboard)
         (g.navWindow ?: findWindowNavFocusable(g.windowsFocusOrder.lastIndex, -Int.MAX_VALUE, -1))?.let {
             g.navWindowingTarget = it.rootWindow // FIXME-DOCK: Will need to use RootWindowDockStop
@@ -376,10 +384,14 @@ fun navUpdateWindowing() {
         if (g.navInputSource == InputSource.NavGamepad) {
             /*  Highlight only appears after a brief time holding the button, so that a fast tap on PadMenu
                 (to toggle NavLayer) doesn't add visual noise             */
-            g.navWindowingHighlightAlpha = max(g.navWindowingHighlightAlpha, saturate((g.navWindowingTimer - NAV_WINDOWING_HIGHLIGHT_DELAY) / 0.05f))
+            g.navWindowingHighlightAlpha = max(
+                g.navWindowingHighlightAlpha,
+                saturate((g.navWindowingTimer - NAV_WINDOWING_HIGHLIGHT_DELAY) / 0.05f)
+            )
 
             // Select window to focus
-            val focusChangeDir = NavInput.FocusPrev.isTest(InputReadMode.RepeatSlow).i - NavInput.FocusNext.isTest(InputReadMode.RepeatSlow).i
+            val focusChangeDir =
+                NavInput.FocusPrev.isTest(InputReadMode.RepeatSlow).i - NavInput.FocusNext.isTest(InputReadMode.RepeatSlow).i
             if (focusChangeDir != 0) {
                 navUpdateWindowingHighlightWindow(focusChangeDir)
                 g.navWindowingHighlightAlpha = 1f
@@ -401,7 +413,10 @@ fun navUpdateWindowing() {
     g.navWindowingTarget?.let {
         if (g.navInputSource == InputSource.NavKeyboard) {
             // Visuals only appears after a brief time after pressing TAB the first time, so that a fast CTRL+TAB doesn't add visual noise
-            g.navWindowingHighlightAlpha = max(g.navWindowingHighlightAlpha, saturate((g.navWindowingTimer - NAV_WINDOWING_HIGHLIGHT_DELAY) / 0.05f)) // 1.0f
+            g.navWindowingHighlightAlpha = max(
+                g.navWindowingHighlightAlpha,
+                saturate((g.navWindowingTimer - NAV_WINDOWING_HIGHLIGHT_DELAY) / 0.05f)
+            ) // 1.0f
             if (Key.Tab.isPressed(true))
                 navUpdateWindowingHighlightWindow(if (io.keyShift) 1 else -1)
             if (!io.keyCtrl)
@@ -413,7 +428,10 @@ fun navUpdateWindowing() {
     // FIXME: We lack an explicit IO variable for "is the imgui window focused", so compare mouse validity to detect the common case of back-end clearing releases all keys on ALT-TAB
     if (NavInput._KeyMenu.isTest(InputReadMode.Pressed))
         g.navWindowingToggleLayer = true
-    if ((g.activeId == 0 || g.activeIdAllowOverlap) && g.navWindowingToggleLayer && NavInput._KeyMenu.isTest(InputReadMode.Released))
+    if ((g.activeId == 0 || g.activeIdAllowOverlap) && g.navWindowingToggleLayer && NavInput._KeyMenu.isTest(
+            InputReadMode.Released
+        )
+    )
         if (isMousePosValid(io.mousePos) == isMousePosValid(io.mousePosPrev))
             applyToggleLayer = true
 
@@ -427,11 +445,17 @@ fun navUpdateWindowing() {
                 moveDelta = getNavInputAmount2d(NavDirSourceFlag.PadLStick.i, InputReadMode.Down)
             if (moveDelta.x != 0f || moveDelta.y != 0f) {
                 val NAV_MOVE_SPEED = 800f
-                // FIXME: Doesn't code variable framerate very well
-                val moveSpeed = floor(NAV_MOVE_SPEED * io.deltaTime * min(io.displayFramebufferScale.x, io.displayFramebufferScale.y))
-                it.rootWindow!!.setPos(it.rootWindow!!.pos + moveDelta * moveSpeed, Cond.Always)
+                val moveSpeed = floor(
+                    NAV_MOVE_SPEED * io.deltaTime * min(
+                        io.displayFramebufferScale.x,
+                        io.displayFramebufferScale.y
+                    )
+                ) // FIXME: Doesn't handle variable framerate very well
+                it.rootWindow!!.apply { // movingWindow
+                    setPos(pos + moveDelta * moveSpeed, Cond.Always)
+                    markIniSettingsDirty()
+                }
                 g.navDisableMouseHover = true
-                it.markIniSettingsDirty()
             }
         }
     }
@@ -494,7 +518,8 @@ fun navUpdateWindowingOverlay() {
     setNextWindowSizeConstraints(Vec2(io.displaySize.x * 0.2f, io.displaySize.y * 0.2f), Vec2(Float.MAX_VALUE))
     setNextWindowPos(Vec2(io.displaySize.x * 0.5f, io.displaySize.y * 0.5f), Cond.Always, Vec2(0.5f))
     pushStyleVar(StyleVar.WindowPadding, style.windowPadding * 2f)
-    val flags = Wf.NoTitleBar or Wf.NoFocusOnAppearing or Wf.NoResize or Wf.NoMove or Wf.NoInputs or Wf.AlwaysAutoResize or Wf.NoSavedSettings
+    val flags =
+        Wf.NoTitleBar or Wf.NoFocusOnAppearing or Wf.NoResize or Wf.NoMove or Wf.NoInputs or Wf.AlwaysAutoResize or Wf.NoSavedSettings
     begin("###NavWindowingList", null, flags)
     for (n in g.windowsFocusOrder.lastIndex downTo 0) {
         val window = g.windowsFocusOrder[n]
@@ -554,15 +579,28 @@ fun navUpdateMoveResult() {
 
     clearActiveID()
     g.navWindow = window
-    if (g.navId != result.id)    {
+    if (g.navId != result.id) {
         // Don't set NavJustMovedToId if just landed on the same spot (which may happen with ImGuiNavMoveFlags_AllowCurrentNavId)
         g.navJustMovedToId = result.id
         g.navJustMovedToFocusScopeId = result.focusScopeId
 
         g.navJustMovedToKeyMods = g.navMoveRequestKeyMods
     }
+    IMGUI_DEBUG_LOG_NAV("[nav] NavMoveRequest: result NavID 0x%08X in Layer ${g.navLayer} Window \"${window.name}\"", result.id) // [JVM] window *is* g.navWindow!!
     setNavIDWithRectRel(result.id, g.navLayer, result.focusScopeId, result.rectRel)
-    g.navMoveFromClampedRefRect = false
+}
+
+fun navUpdateInitResult() {
+    // In very rare cases g.NavWindow may be null (e.g. clearing focus after requesting an init request, which does happen when releasing Alt while clicking on void)
+    val nav = g.navWindow ?: return
+
+    // Apply result from previous navigation init request (will typically select the first item, unless SetItemDefaultFocus() has been called)
+    IMGUI_DEBUG_LOG_NAV("[nav] NavInitRequest: result NavID 0x%08X in Layer ${g.navLayer} Window \"${nav.name}\"", g.navInitResultId)
+    if (g.navInitRequestFromMove)
+        setNavIDWithRectRel(g.navInitResultId, g.navLayer, 0, g.navInitResultRectRel)
+    else
+        setNavID(g.navInitResultId, g.navLayer, 0)
+    nav.navRectRel[g.navLayer] = g.navInitResultRectRel
 }
 
 /** Handle PageUp/PageDown/Home/End keys */
@@ -594,12 +632,14 @@ fun navUpdatePageUpPageDown(): Float {
             var navScoringRectOffsetY = 0f
             if (Key.PageUp.isPressed(true)) {
                 navScoringRectOffsetY = -pageOffsetY
-                g.navMoveDir = Dir.Down // Because our scoring rect is offset up, we request the down direction (so we can always land on the last item)
+                g.navMoveDir =
+                    Dir.Down // Because our scoring rect is offset up, we request the down direction (so we can always land on the last item)
                 g.navMoveClipDir = Dir.Up
                 g.navMoveRequestFlags = NavMoveFlag.AllowCurrentNavId or NavMoveFlag.AlsoScoreVisibleSet
             } else if (Key.PageDown.isPressed(true)) {
                 navScoringRectOffsetY = +pageOffsetY
-                g.navMoveDir = Dir.Up // Because our scoring rect is offset down, we request the up direction (so we can always land on the last item)
+                g.navMoveDir =
+                    Dir.Up // Because our scoring rect is offset down, we request the up direction (so we can always land on the last item)
                 g.navMoveClipDir = Dir.Down
                 g.navMoveRequestFlags = NavMoveFlag.AllowCurrentNavId or NavMoveFlag.AlsoScoreVisibleSet
             } else if (homePressed) {
@@ -637,7 +677,7 @@ fun navUpdateAnyRequestFlag() {
 }
 
 
-fun navEndFrame()  {
+fun navEndFrame() {
 
     // Show CTRL+TAB list window
     if (g.navWindowingTarget != null)
@@ -647,7 +687,8 @@ fun navEndFrame()  {
     val window = g.navWrapRequestWindow
     val moveFlags: NavMoveFlags = g.navWrapRequestFlags
     if (window != null && g.navWindow === window && navMoveRequestButNoResultYet() &&
-            g.navMoveRequestForward == NavForward.None && g.navLayer == NavLayer.Main) {
+        g.navMoveRequestForward == NavForward.None && g.navLayer == NavLayer.Main
+    ) {
 
         assert(moveFlags != 0) // No points calling this with no wrapping
         val bbRel = Rect(window.navRectRel[0])
@@ -721,8 +762,10 @@ fun navScoreItem(result: NavMoveResult, cand: Rect): Boolean {
     // FIXME-NAV: Introducing biases for vertical navigation, needs to be removed.
     var dbX = navScoreItemDistInterval(cand.min.x, cand.max.x, curr.min.x, curr.max.x)
     // Scale down on Y to keep using box-distance for vertically touching items
-    val dbY = navScoreItemDistInterval(lerp(cand.min.y, cand.max.y, 0.2f), lerp(cand.min.y, cand.max.y, 0.8f),
-            lerp(curr.min.y, curr.max.y, 0.2f), lerp(curr.min.y, curr.max.y, 0.8f))
+    val dbY = navScoreItemDistInterval(
+        lerp(cand.min.y, cand.max.y, 0.2f), lerp(cand.min.y, cand.max.y, 0.8f),
+        lerp(curr.min.y, curr.max.y, 0.2f), lerp(curr.min.y, curr.max.y, 0.8f)
+    )
     if (dbY != 0f && dbX != 0f)
         dbX = dbX / 1000f + if (dbX > 0f) 1f else -1f
     val distBox = abs(dbX) + abs(dbY)
@@ -757,7 +800,8 @@ fun navScoreItem(result: NavMoveResult, cand: Rect): Boolean {
 
     if (IMGUI_DEBUG_NAV_SCORING)
         if (isMouseHoveringRect(cand)) {
-            val buf = "dbox (%.2f,%.2f->%.4f)\ndcen (%.2f,%.2f->%.4f)\nd (%.2f,%.2f->%.4f)\nnav WENS${g.navMoveDir}, quadrant WENS$quadrant"
+            val buf =
+                "dbox (%.2f,%.2f->%.4f)\ndcen (%.2f,%.2f->%.4f)\nd (%.2f,%.2f->%.4f)\nnav WENS${g.navMoveDir}, quadrant WENS$quadrant"
                     .format(style.locale, dbX, dbY, distBox, dcX, dcY, distCenter, dax, day, distAxial).toByteArray()
             getForegroundDrawList(window).apply {
                 addRect(curr.min, curr.max, COL32(255, 200, 0, 100))
@@ -819,7 +863,8 @@ fun navScoreItem(result: NavMoveResult, cand: Rect): Boolean {
     if (result.distBox == Float.MAX_VALUE && distAxial < result.distAxial)  // Check axial match
         if (g.navLayer == NavLayer.Menu && g.navWindow!!.flags hasnt Wf._ChildMenu)
             if ((g.navMoveDir == Dir.Left && dax < 0f) || (g.navMoveDir == Dir.Right && dax > 0f) ||
-                    (g.navMoveDir == Dir.Up && day < 0f) || (g.navMoveDir == Dir.Down && day > 0f)) {
+                (g.navMoveDir == Dir.Up && day < 0f) || (g.navMoveDir == Dir.Down && day > 0f)
+            ) {
                 result.distAxial = distAxial
                 newBest = true
             }
@@ -872,7 +917,12 @@ fun navProcessItem(window: Window, navBb: Rect, id: ID) {
         val VISIBLE_RATIO = 0.7f
         if (g.navMoveRequestFlags has NavMoveFlag.AlsoScoreVisibleSet && window.clipRect overlaps navBb)
             if (glm.clamp(navBb.max.y, window.clipRect.min.y, window.clipRect.max.y) -
-                    glm.clamp(navBb.min.y, window.clipRect.min.y, window.clipRect.max.y) >= (navBb.max.y - navBb.min.y) * VISIBLE_RATIO)
+                glm.clamp(
+                    navBb.min.y,
+                    window.clipRect.min.y,
+                    window.clipRect.max.y
+                ) >= (navBb.max.y - navBb.min.y) * VISIBLE_RATIO
+            )
                 if (navScoreItem(g.navMoveResultLocalVisibleSet, navBb))
                     result = g.navMoveResultLocalVisibleSet.also {
                         it.window = window
@@ -884,12 +934,14 @@ fun navProcessItem(window: Window, navBb: Rect, id: ID) {
 
     // Update window-relative bounding box of navigated item
     if (g.navId == id) {
-        g.navWindow = window    // Always refresh g.NavWindow, because some operations such as FocusItem() don't have a window.
+        g.navWindow =
+            window    // Always refresh g.NavWindow, because some operations such as FocusItem() don't have a window.
         g.navLayer = window.dc.navLayerCurrent
         g.navFocusScopeId = window.dc.navFocusScopeIdCurrent
         g.navIdIsAlive = true
         g.navIdTabCounter = window.dc.focusCounterTabStop
-        window.navRectRel[window.dc.navLayerCurrent] = navBbRel    // Store item bounding box (relative to window position)
+        window.navRectRel[window.dc.navLayerCurrent] =
+            navBbRel    // Store item bounding box (relative to window position)
     }
 }
 
@@ -902,9 +954,18 @@ fun navCalcPreferredRefPos(): Vec2 {
     } else {
         // When navigation is active and mouse is disabled, decide on an arbitrary position around the bottom left of the currently navigated item.
         val rectRel = g.navWindow!!.navRectRel[g.navLayer]
-        val pos = g.navWindow!!.pos + Vec2(rectRel.min.x + min(style.framePadding.x * 4, rectRel.width), rectRel.max.y - min(style.framePadding.y, rectRel.height))
+        val pos = g.navWindow!!.pos + Vec2(
+            rectRel.min.x + min(style.framePadding.x * 4, rectRel.width),
+            rectRel.max.y - min(style.framePadding.y, rectRel.height)
+        )
         val visibleRect = viewportRect
-        return glm.floor(glm.clamp(pos, visibleRect.min, visibleRect.max))   // ImFloor() is important because non-integer mouse position application in back-end might be lossy and result in undesirable non-zero delta.
+        return glm.floor(
+            glm.clamp(
+                pos,
+                visibleRect.min,
+                visibleRect.max
+            )
+        )   // ImFloor() is important because non-integer mouse position application in back-end might be lossy and result in undesirable non-zero delta.
     }
 }
 

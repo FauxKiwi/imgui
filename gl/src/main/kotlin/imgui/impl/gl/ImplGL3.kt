@@ -1,7 +1,6 @@
 package imgui.impl.gl
 
 import glm_.L
-import glm_.f
 import glm_.glm
 import glm_.i
 import glm_.vec2.Vec2
@@ -23,7 +22,6 @@ import imgui.internal.DrawVert
 import imgui.or
 import kool.*
 import org.lwjgl.opengl.GL
-import org.lwjgl.opengl.GL20C
 import org.lwjgl.opengl.GL30C.*
 import org.lwjgl.opengl.GL32C.glDrawElementsBaseVertex
 import org.lwjgl.opengl.GL33C
@@ -94,7 +92,7 @@ class ImplGL3 : GLInterface {
         val orthoProjection = glm.ortho(L, R, B, T, mat)
         glUseProgram(program.name)
         glUniform(matUL, orthoProjection)
-        if (SAMPLER_BINDING)
+        if (OPENGL_MAY_HAVE_BIND_SAMPLER && glVersion > 330)
             glBindSampler(0, 0) // We use combined texture/sampler state. Applications using GL 3.3 may set that otherwise.
 
         vao.bind()
@@ -105,9 +103,9 @@ class ImplGL3 : GLInterface {
         glEnableVertexAttribArray(semantic.attr.POSITION)
         glEnableVertexAttribArray(semantic.attr.TEX_COORD)
         glEnableVertexAttribArray(semantic.attr.COLOR)
-        glVertexAttribPointer(semantic.attr.POSITION, Vec2.length, GL_FLOAT, false, DrawVert.size, 0)
-        glVertexAttribPointer(semantic.attr.TEX_COORD, Vec2.length, GL_FLOAT, false, DrawVert.size, Vec2.size)
-        glVertexAttribPointer(semantic.attr.COLOR, Vec4ub.length, GL_UNSIGNED_BYTE, true, DrawVert.size, Vec2.size * 2)
+        glVertexAttribPointer(semantic.attr.POSITION, Vec2.length, GL_FLOAT, false, DrawVert.SIZE, 0)
+        glVertexAttribPointer(semantic.attr.TEX_COORD, Vec2.length, GL_FLOAT, false, DrawVert.SIZE, Vec2.size)
+        glVertexAttribPointer(semantic.attr.COLOR, Vec4ub.length, GL_UNSIGNED_BYTE, true, DrawVert.SIZE, Vec2.size * 2)
     }
 
     /** OpenGL3 Render function.
@@ -128,7 +126,7 @@ class ImplGL3 : GLInterface {
         val lastProgram = glGetInteger(GL_CURRENT_PROGRAM)
         val lastTexture = glGetInteger(GL_TEXTURE_BINDING_2D)
         val lastSampler = when {
-            SAMPLER_BINDING -> glGetInteger(GL33C.GL_SAMPLER_BINDING)
+            !OPENGL_MAY_HAVE_BIND_SAMPLER && glVersion > 330 -> glGetInteger(GL33C.GL_SAMPLER_BINDING)
             else -> 0
         }
         val lastArrayBuffer = glGetInteger(GL_ARRAY_BUFFER_BINDING)
@@ -200,8 +198,8 @@ class ImplGL3 : GLInterface {
         // Restore modified GL state
         glUseProgram(lastProgram)
         glBindTexture(GL_TEXTURE_2D, lastTexture)
-        if (SAMPLER_BINDING)
-            glBindSampler(0, lastSampler)
+        if (OPENGL_MAY_HAVE_BIND_SAMPLER && glVersion > 330)
+                glBindSampler(0, lastSampler)
         glActiveTexture(lastActiveTexture)
         glBindVertexArray(lastVertexArray)
         glBindBuffer(GL_ARRAY_BUFFER, lastArrayBuffer)
@@ -303,15 +301,17 @@ class ImplGL3 : GLInterface {
     companion object {
 
         var OPENGL_ES2 = false
+        var OPENGL_ES3 = false
+
+        // Desktop GL 3.2+ has glDrawElementsBaseVertex() which GL ES and WebGL don't have.
+        val OPENGL_MAY_HAVE_VTX_OFFSET by lazy { !OPENGL_ES2 && !OPENGL_ES3 && glVersion >= 330 }
+
+        // Desktop GL 3.3+ has glBindSampler()
+        val OPENGL_MAY_HAVE_BIND_SAMPLER by lazy { !OPENGL_ES2 && !OPENGL_ES3 && glVersion >= 330 }
 
         var CLIP_ORIGIN = false && Platform.get() != Platform.MACOSX
 
         var POLYGON_MODE = true
-        var SAMPLER_BINDING = GL.getCapabilities().OpenGL33
-            set(value) {
-                //prevent crashes
-                field = value and GL.getCapabilities().OpenGL33
-            }
         var UNPACK_ROW_LENGTH = true
         var SINGLE_GL_CONTEXT = true
 

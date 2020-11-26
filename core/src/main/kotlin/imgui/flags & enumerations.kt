@@ -202,6 +202,10 @@ enum class InputTextFlag(@JvmField val i: InputTextFlags) { // TODO Int -> *flag
      *  You will be provided a new BufSize in the callback and NEED to honor it. (see misc/cpp/imgui_stl.h for an example of using this) */
     CallbackResize(1 shl 18),
 
+    /** Callback on any edit (note that InputText() already returns true on edit, the callback is useful mainly to
+     *  manipulate the underlying buffer while focus is active) */
+    CallbackEdit(1 shl 19),
+
     // [Internal]
 
     /** For internal use by InputTextMultiline()    */
@@ -396,7 +400,11 @@ enum class SelectableFlag(@JvmField val i: SelectableFlags) {
     /** Always show active when held, even is not hovered. This concept could probably be renamed/formalized somehow. */
     _DrawHoveredWhenHeld(1 shl 24),
 
-    _SetNavIdOnHover(1 shl 25);
+    /** Set Nav/Focus ID on mouse hover (used by MenuItem) */
+    _SetNavIdOnHover(1 shl 25),
+
+    /** Disable padding each side with ItemSpacing * 0.5f */
+    _NoPadWithHalfSpacing(1 shl 26);
 
     infix fun and(b: SelectableFlag): SelectableFlags = i and b.i
     infix fun and(b: SelectableFlags): SelectableFlags = i and b
@@ -540,10 +548,22 @@ enum class TabItemFlag(@JvmField val i: TabItemFlags) {
     /** Disable tooltip for the given tab */
     NoTooltip(1 shl 4),
 
+    /** Disable reordering this tab or having another tab cross over this tab */
+    NoReorder                     (1 shl 5),
+
+    /**  Enforce the tab position to the left of the tab bar (after the tab list popup button) */
+    Leading (1 shl 6),
+
+    /**  Enforce the tab position to the right of the tab bar (before the scrolling buttons) */
+    Trailing (1 shl 7),
+
     // [Internal]
 
     /** Track whether p_open was set or not (we'll need this info on the next frame to recompute ContentWidth during layout) */
-    _NoCloseButton(1 shl 20);
+    _NoCloseButton(1 shl 20),
+
+    /** Used by TabItemButton, change the tab item behavior to mimic a button */
+    _Button(1 shl 21);
 
     infix fun and(b: TabItemFlag): TabItemFlags = i and b.i
     infix fun and(b: TabItemFlags): TabItemFlags = i and b
@@ -715,10 +735,14 @@ val PAYLOAD_TYPE_COLOR_3F = "_COL3F"
 val PAYLOAD_TYPE_COLOR_4F = "_COL4F"
 
 /** A primary data type */
-enum class DataType {
-    Byte, Ubyte, Short, Ushort, Int, Uint, Long, Ulong, Float, Double,
+enum class DataType(val name_: String) {
+    Byte("S8"), Ubyte("U8"),
+    Short("S16"), Ushort("U16"),
+    Int("S32"), Uint("U32"),
+    Long("S64"), Ulong("U64"),
+    Float("float"), Double("double"),
 
-    _String, _Pointer, _ID;
+    _String("[internal] String"), _Pointer("[internal] Pointer"), _ID("[internal] ID");
 
     @JvmField
     val i = ordinal
@@ -1308,7 +1332,7 @@ enum class SliderFlag(val i: SliderFlags) {
     None(0),
 
     /** Clamp value to min/max bounds when input manually with CTRL+Click. By default CTRL+Click allows going out of bounds. */
-    ClampOnInput(1 shl 4),
+    AlwaysClamp(1 shl 4),
 
     /** Make the widget logarithmic (linear otherwise). Consider using ImGuiDragFlags_NoRoundToFormat with this if using a format-string with small amount of digits. */
     Logarithmic(1 shl 5),

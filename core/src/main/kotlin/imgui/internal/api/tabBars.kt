@@ -40,7 +40,7 @@ internal interface tabBars {
         // While rendering tabs, we trim 1 pixel off the top of our bounding box so they can fit within a regular frame height while looking "detached" from it.
         val width = bb.width
         assert(width > 0f)
-        val rounding = max(0f, min(style.tabRounding, width * 0.5f - 1f))
+        val rounding = max(0f, min(if(flags has TabItemFlag._Button) g.style.frameRounding else style.tabRounding, width * 0.5f - 1f))
         val y1 = bb.min.y + 1f
         val y2 = bb.max.y - 1f
         drawList.apply {
@@ -100,8 +100,8 @@ internal interface tabBars {
         var closeButtonPressed = false
         var closeButtonVisible = false
         if (closeButtonId != 0)
-            if (isContentsVisible || bb.width >= style.tabMinWidthForUnselectedCloseButton)
-                if (g.hoveredId == tabId || g.hoveredId == closeButtonId || g.activeId == closeButtonId)
+            if (isContentsVisible || bb.width >= style.tabMinWidthForCloseButton)
+                if (g.hoveredId == tabId || g.hoveredId == closeButtonId || g.activeId == tabId || g.activeId == closeButtonId)
                     closeButtonVisible = true
         if (closeButtonVisible) {
             val closeButtonSz = g.fontSize
@@ -119,7 +119,7 @@ internal interface tabBars {
             textPixelClipBb.max.x -= closeButtonSz
         }
 
-        // Label with ellipsis
+        // FIXME: if FramePadding is noticeably large, ellipsis_max_x will be wrong here (e.g. #3497), maybe for consistency that parameter of RenderTextEllipsis() shouldn't exist..
         val ellipsisMaxX = if (closeButtonVisible) textPixelClipBb.max.x else bb.max.x - 1f
         renderTextEllipsis(drawList, textEllipsisClipBb.min, textEllipsisClipBb.max, textPixelClipBb.max.x,
                 ellipsisMaxX, label, textSizeIfKnown = labelSize)

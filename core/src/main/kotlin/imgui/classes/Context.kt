@@ -13,6 +13,7 @@ import imgui.internal.classes.*
 import imgui.internal.hash
 import imgui.internal.sections.*
 import imgui.static.*
+import uno.kotlin.NUL
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.*
@@ -258,7 +259,7 @@ class Context(sharedFontAtlas: FontAtlas? = null) {
     /** Keyboard or Gamepad mode? THIS WILL ONLY BE None or NavGamepad or NavKeyboard.  */
     var navInputSource = InputSource.None
 
-    /** Rectangle used for scoring, in screen space. Based of window.dc.navRefRectRel[], modified for directional navigation scoring.  */
+    /** Rectangle used for scoring, in screen space. Based of window.NavRectRel[], modified for directional navigation scoring.  */
     var navScoringRect = Rect()
 
     /** Metrics for debugging   */
@@ -271,7 +272,7 @@ class Context(sharedFontAtlas: FontAtlas? = null) {
     /** == NavWindow->DC.FocusIdxTabCounter at time of NavId processing */
     var navIdTabCounter = Int.MAX_VALUE
 
-    /** Nav widget has been seen this frame ~~ NavRefRectRel is valid   */
+    /** Nav widget has been seen this frame ~~ NavRectRel is valid   */
     var navIdIsAlive = false
 
     /** When set we will update mouse position if (io.ConfigFlag & ConfigFlag.NavMoveMouse) if set (NB: this not enabled by default) */
@@ -297,9 +298,6 @@ class Context(sharedFontAtlas: FontAtlas? = null) {
 
     /** Init request result rectangle (relative to parent window) */
     var navInitResultRectRel = Rect()
-
-    /** Set by manual scrolling, if we scroll to a point where NavId isn't visible we reset navigation from visible items   */
-    var navMoveFromClampedRefRect = false
 
     /** Move request for this frame */
     var navMoveRequest = false
@@ -513,6 +511,10 @@ class Context(sharedFontAtlas: FontAtlas? = null) {
 
     /** Last cursor position passed to the OS Input Method Editor   */
     var platformImeLastPos = Vec2(Float.MAX_VALUE)
+
+    /** '.' or *localeconv()->decimal_point */
+    var platformLocaleDecimalPoint = '.'
+
 
     //------------------------------------------------------------------
     // Settings

@@ -44,7 +44,7 @@ import imgui.ImGui.itemAdd
 import imgui.ImGui.itemSize
 import imgui.ImGui.markItemEdited
 import imgui.ImGui.openPopup
-import imgui.ImGui.openPopupContextItem
+import imgui.ImGui.openPopupOnItemClick
 import imgui.ImGui.popID
 import imgui.ImGui.popItemFlag
 import imgui.ImGui.popItemWidth
@@ -97,8 +97,7 @@ interface widgetsColorEditorPicker {
      *  With typical options: Left-click on colored square to open color picker. Right-click to open option menu.
      *  CTRL-Click over input fields to edit them and TAB to go to next item.   */
     fun colorEdit4(label: String, col: Vec4, flags: ColorEditFlags = 0): Boolean =
-            colorEdit4(label, col to _fa, flags)
-                    .also { col put _fa }
+            colorEdit4(label, col to _fa, flags).also { col put _fa }
 
     fun colorEdit4(label: String, col: FloatArray, flags_: ColorEditFlags = 0): Boolean {
 
@@ -171,7 +170,7 @@ interface widgetsColorEditorPicker {
             val hidePrefix = wItemOne <= calcTextSize(if (flags has Cef.Float) "M:0.000" else "M:000").x
             val fmtIdx = if (hidePrefix) 0 else if (flags has Cef.DisplayHSV) 2 else 1
 
-            for (n in 0 until components) {
+            repeat (components) { n ->
                 if (n > 0)
                     sameLine(0f, style.itemInnerSpacing.x)
                 setNextItemWidth(if (n + 1 < components) wItemOne else wItemLast)
@@ -183,7 +182,7 @@ interface widgetsColorEditorPicker {
                         dragScalar(ids[n], f, n, 1f / 255f, 0f, if (hdr) 0f else 1f, fmtTableFloat[fmtIdx][n]) || valueChanged // ~ valueChangedAsFloat
                     else -> dragInt(ids[n], i, n, 1f, 0, if (hdr) 0 else 255, fmtTableInt[fmtIdx][n]) || valueChanged
                 }
-                if (flags hasnt Cef.NoOptions) openPopupContextItem("context")
+                if (flags hasnt Cef.NoOptions) openPopupOnItemClick("context")
             }
 
         } else if (flags has Cef.DisplayHEX && flags hasnt Cef.NoInputs) {
@@ -201,7 +200,7 @@ interface widgetsColorEditorPicker {
                 buf.substring(p).scanHex(i, if (alpha) 4 else 3, 2)   // Treat at unsigned (%X is unsigned)
             }
             if (flags hasnt Cef.NoOptions)
-                openPopupContextItem("context")
+                openPopupOnItemClick("context")
         }
 
         var pickerActiveWindow: Window? = null
@@ -219,7 +218,7 @@ interface widgetsColorEditorPicker {
                     openPopup("picker")
                     setNextWindowPos(window.dc.lastItemRect.bl + Vec2(-1, style.itemSpacing.y))
                 }
-            if (flags hasnt Cef.NoOptions) openPopupContextItem("context")
+            if (flags hasnt Cef.NoOptions) openPopupOnItemClick("context")
 
             if (beginPopup("picker")) {
                 pickerActiveWindow = g.currentWindow
@@ -448,7 +447,7 @@ interface widgetsColorEditorPicker {
                     valueChanged = true
                 }
             }
-            if (flags hasnt Cef.NoOptions) openPopupContextItem("context")
+            if (flags hasnt Cef.NoOptions) openPopupOnItemClick("context")
 
         } else if (flags has Cef.PickerHueBar) {
             // SV rectangle logic
@@ -459,7 +458,7 @@ interface widgetsColorEditorPicker {
                 valueChangedSv = true
                 valueChanged = true
             }
-            if (flags hasnt Cef.NoOptions) openPopupContextItem("context")
+            if (flags hasnt Cef.NoOptions) openPopupOnItemClick("context")
             // Hue bar logic
             cursorScreenPos = Vec2(bar0PosX, pickerPos.y)
             invisibleButton("hue", Vec2(barsWidth, svPickerSize))

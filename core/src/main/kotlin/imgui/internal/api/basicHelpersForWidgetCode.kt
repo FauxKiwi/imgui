@@ -87,19 +87,16 @@ internal interface basicHelpersForWidgetCode {
 
         val window = g.currentWindow!!
         if (id != 0) {
-            /*  Navigation processing runs prior to clipping early-out
-                (a) So that NavInitRequest can be honored, for newly opened windows to select a default widget
-                (b) So that we can scroll up/down past clipped items. This adds a small O(N) cost to regular navigation
-                    requests unfortunately, but it is still limited to one window. It may not scale very well for windows
-                     with ten of thousands of item, but at least NavMoveRequest is only set on user interaction,
-                     aka maximum once a frame.
-                     We could early out with "if (is_clipped && !g.NavInitRequest) return false;" but when we wouldn't
-                     be able to reach unclipped widgets. This would work if user had explicit scrolling control
-                     (e.g. mapped on a stick).
-                We intentionally don't check if g.NavWindow != NULL because g.NavAnyRequest should only be set
-                when it is non null.
-                If we crash on a NULL g.NavWindow we need to fix the bug elsewhere.    */
-            window.dc.navLayerActiveMaskNext = window.dc.navLayerActiveMaskNext or window.dc.navLayerCurrentMask
+            // Navigation processing runs prior to clipping early-out
+            //  (a) So that NavInitRequest can be honored, for newly opened windows to select a default widget
+            //  (b) So that we can scroll up/down past clipped items. This adds a small O(N) cost to regular navigation requests
+            //      unfortunately, but it is still limited to one window. It may not scale very well for windows with ten of
+            //      thousands of item, but at least NavMoveRequest is only set on user interaction, aka maximum once a frame.
+            //      We could early out with "if (is_clipped && !g.NavInitRequest) return false;" but when we wouldn't be able
+            //      to reach unclipped widgets. This would work if user had explicit scrolling control (e.g. mapped on a stick).
+            // We intentionally don't check if g.NavWindow != NULL because g.NavAnyRequest should only be set when it is non null.
+            // If we crash on a NULL g.NavWindow we need to fix the bug elsewhere.
+            window.dc.navLayerActiveMaskNext = window.dc.navLayerActiveMaskNext or (1 shl window.dc.navLayerCurrent)
             if (g.navId == id || g.navAnyRequest)
                 if (g.navWindow!!.rootWindowForNav === window.rootWindowForNav)
                     if (window == g.navWindow || (window.flags or g.navWindow!!.flags) has WindowFlag._NavFlattened)
@@ -308,26 +305,29 @@ internal interface basicHelpersForWidgetCode {
             mx
         }
 
-    /** Shrink excess width from a set of item, by removing width from the larger items first. */
-    fun shrinkWidths(items: ArrayList<ShrinkWidthItem>, widthExcess_: Float) {
+    /** Shrink excess width from a set of item, by removing width from the larger items first.
+     *  Set items Width to -1.0f to disable shrinking this item. */
+    fun shrinkWidths(items: ArrayList<ShrinkWidthItem>, ptr: Int, count: Int, widthExcess_: Float) {
         var widthExcess = widthExcess_
-        val count = items.size
         if (count == 1) {
-            items[0].width = (items[0].width - widthExcess) max 1f
+            if (items[ptr].width >= 0f)
+                items[ptr].width = (items[ptr].width - widthExcess) max 1f
             return
         }
-        items.sortWith(shrinkWidthItemComparer)
+        items.subList(ptr, ptr + count).sortWith(shrinkWidthItemComparer)
         var countSameWidth = 1
         while (widthExcess > 0f && countSameWidth < count) {
-            while (countSameWidth < count && items[0].width <= items[countSameWidth].width)
+            while (countSameWidth < count && items[ptr].width <= items[countSameWidth].width)
                 countSameWidth++
             val maxWidthToRemovePerItem = when {
-                countSameWidth < count -> items[0].width - items[countSameWidth].width
-                else -> items[0].width - 1f
+                countSameWidth < count && items[ptr + countSameWidth].width >= 0f -> items[ptr].width - items[ptr + countSameWidth].width
+                else -> items[ptr].width - 1f
             }
+            if (maxWidthToRemovePerItem <= 0f)
+                break
             val widthToRemovePerItem = (widthExcess / countSameWidth) min maxWidthToRemovePerItem
             for (itemN in 0 until countSameWidth)
-                items[itemN].width -= widthToRemovePerItem
+                items[ptr + itemN].width -= widthToRemovePerItem
             widthExcess -= widthToRemovePerItem * countSameWidth
         }
 

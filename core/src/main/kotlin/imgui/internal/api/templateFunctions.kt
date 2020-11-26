@@ -38,7 +38,7 @@ internal interface templateFunctions {
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Int, FLOATTYPE = Float> */
+     *  template<TYPE = Int, SIGNEDTYPE = Int, FLOATTYPE = Float> */
     fun scaleRatioFromValueT(dataType: DataType, v: Int, vMin_: Int, vMax_: Int, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -101,7 +101,7 @@ internal interface templateFunctions {
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Uint, FLOATTYPE = Float> */
+     *  template<TYPE = Uint, SIGNEDTYPE = Int, FLOATTYPE = Float> */
     fun scaleRatioFromValueT(dataType: DataType, v: Uint, vMin_: Uint, vMax_: Uint, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -156,13 +156,13 @@ internal interface templateFunctions {
                 if (flipped) 1f - result else result
             }
             // Linear slider
-            else -> (vClamped - vMin).f / (vMax - vMin).f
+            else -> (vClamped - vMin).v.f / (vMax - vMin).v.f
         }
     }
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Long, FLOATTYPE = Double> */
+     *  template<TYPE = Long, SIGNEDTYPE = Long, FLOATTYPE = Double> */
     fun scaleRatioFromValueT(dataType: DataType, v: Long, vMin_: Long, vMax_: Long, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -225,7 +225,7 @@ internal interface templateFunctions {
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Ulong, FLOATTYPE = Double> */
+     *  template<TYPE = Ulong, SIGNEDTYPE = Long, FLOATTYPE = Double> */
     fun scaleRatioFromValueT(dataType: DataType, v: Ulong, vMin_: Ulong, vMax_: Ulong, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -281,13 +281,13 @@ internal interface templateFunctions {
                 if (flipped) 1f - result else result
             }
             // Linear slider
-            else -> ((vClamped - vMin).d / (vMax - vMin).d).f
+            else -> ((vClamped - vMin).v.d / (vMax - vMin).v.d).f
         }
     }
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Float, FLOATTYPE = Float> */
+     *  template<TYPE = Float, SIGNEDTYPE = Float, FLOATTYPE = Float> */
     fun scaleRatioFromValueT(dataType: DataType, v: Float, vMin_: Float, vMax_: Float, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -349,7 +349,7 @@ internal interface templateFunctions {
 
     /** Convert a value v in the output space of a slider into a parametric position on the slider itself
      *  (the logical opposite of scaleValueFromRatioT)
-     *  template<TYPE = Double, FLOATTYPE = Double> */
+     *  template<TYPE = Double, SIGNEDTYPE = Double, FLOATTYPE = Double> */
     fun scaleRatioFromValueT(dataType: DataType, v: Double, vMin_: Double, vMax_: Double, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -411,7 +411,7 @@ internal interface templateFunctions {
 
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Int, FLOATTYPE = Float> */
+     *  template<TYPE = Int, SIGNEDTYPE = Int, FLOATTYPE = Float> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Int, vMax: Int, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Int {
 
@@ -471,20 +471,22 @@ internal interface templateFunctions {
             else -> when {
                 // Linear slider
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
                     val vNewOffF = (vMax - vMin) * t
-                    val vNewOffFloor = vNewOffF.i
-                    val vNewOffRound = (vNewOffF + 0.5f).i
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                    val tmp = vNewOffF + if(vMin > vMax) -0.5f else 0.5f
+                    vMin + tmp.i
                 }
+                else -> vMax
             }
         }
     }
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Uint, FLOATTYPE = Float> */
+     *  template<TYPE = Uint, SIGNEDTYPE = Int, FLOATTYPE = Float> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Uint, vMax: Uint, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Uint {
 
@@ -541,20 +543,22 @@ internal interface templateFunctions {
             isLogarithmic -> calcLogarithmic()
             else -> when { // Linear slider
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
-                    val vNewOffF = (vMax - vMin).f * t
-                    val vNewOffFloor = vNewOffF.ui
-                    val vNewOffRound = Uint(vNewOffF + 0.5f)
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
+                    val vNewOffF = (vMax - vMin).v * t
+                    val tmp = vNewOffF + if(vMin > vMax) -0.5f else 0.5f
+                    vMin + tmp.i
                 }
+                else -> vMax
             }
         }
     }
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Long, FLOATTYPE = Double> */
+     *  template<TYPE = Long, SIGNEDTYPE = Long, FLOATTYPE = Double> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Long, vMax: Long, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Long {
 
@@ -614,20 +618,22 @@ internal interface templateFunctions {
             else -> when {
                 // Linear slider
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
-                    val vNewOffF = (vMax - vMin).d * t
-                    val vNewOffFloor = vNewOffF.L
-                    val vNewOffRound = (vNewOffF + 0.5).L
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
+                    val vNewOffF = (vMax - vMin) * t
+                    val tmp = vNewOffF.d + if(vMin > vMax) -0.5 else 0.5
+                    vMin + tmp.L
                 }
+                else -> vMax
             }
         }
     }
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Ulong, FLOATTYPE = Double> */
+     *  template<TYPE = Ulong, SIGNEDTYPE = Long, FLOATTYPE = Double> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Ulong, vMax: Ulong, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Ulong {
 
@@ -684,20 +690,22 @@ internal interface templateFunctions {
             isLogarithmic -> calcLogarithmic()
             else -> when { // Linear slider
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
-                    val vNewOffF = (vMax - vMin).d * t
-                    val vNewOffFloor = vNewOffF.ul
-                    val vNewOffRound = Ulong(vNewOffF + 0.5)
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
+                    val vNewOffF = (vMax - vMin).v * t
+                    val tmp = vNewOffF.d + if(vMin > vMax) -0.5f else 0.5f
+                    vMin + tmp.L
                 }
+                else -> vMax
             }
         }
     }
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Float, FLOATTYPE = Float> */
+     *  template<TYPE = Float, SIGNEDTYPE = Float, FLOATTYPE = Float> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Float, vMax: Float, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Float {
 
@@ -756,20 +764,22 @@ internal interface templateFunctions {
             isLogarithmic -> calcLogarithmic()
             else -> when { // Linear slider
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
                     val vNewOffF = (vMax - vMin) * t
-                    val vNewOffFloor = vNewOffF
-                    val vNewOffRound = vNewOffF + 0.5f
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                    val tmp = vNewOffF + if(vMin > vMax) -0.5f else 0.5f
+                    vMin + tmp
                 }
+                else -> vMax
             }
         }
     }
 
     /** Convert a parametric position on a slider into a value v in the output space (the logical opposite of scaleRatioFromValueT)
-     *  template<TYPE = Double, FLOATTYPE = Double> */
+     *  template<TYPE = Double, SIGNEDTYPE = Double, FLOATTYPE = Double> */
     fun scaleValueFromRatioT(dataType: DataType, t: Float, vMin: Double, vMax: Double, isLogarithmic: Boolean,
                              logarithmicZeroEpsilon: Float, zeroDeadzoneHalfsize: Float): Double {
 
@@ -828,14 +838,16 @@ internal interface templateFunctions {
             isLogarithmic -> calcIsLogarithmic()
             else -> when {
                 isDecimal -> lerp(vMin, vMax, t)
-                else -> {
-                    // For integer values we want the clicking position to match the grab box so we round above
-                    // This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - For integer values we want the clicking position to match the grab box so we round above
+                //   This code is carefully tuned to work with large values (e.g. high ranges of U64) while preserving this property..
+                // - Not doing a *1.0 multiply at the end of a range as it tends to be lossy. While absolute aiming at a large s64/u64
+                //   range is going to be imprecise anyway, with this check we at least make the edge values matches expected limits.
+                t < 1f -> {
                     val vNewOffF = (vMax - vMin) * t
-                    val vNewOffFloor = vNewOffF
-                    val vNewOffRound = vNewOffF + 0.5
-                    vMin + if (vNewOffFloor < vNewOffRound) vNewOffRound else vNewOffFloor
+                    val tmp = vNewOffF + if(vMin > vMax) -0.5 else 0.5
+                    vMin + tmp
                 }
+                else -> vMax
             }
         }
     }
@@ -1017,7 +1029,7 @@ internal interface templateFunctions {
             vCur = scaleValueFromRatioT(dataType, vNewParametric, vMin, vMax, isLogarithmic, logarithmicZeroEpsilon, zeroDeadzoneHalfsize)
             vOldRefForAccumRemainder = vOldParametric
         } else
-            vCur += g.dragCurrentAccum
+            vCur += g.dragCurrentAccum.i
 
         // Round to user desired precision based on format string
         if (flags hasnt SliderFlag.NoRoundToFormat)
@@ -2282,8 +2294,7 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d.i
             else -> vStr.i
@@ -2296,11 +2307,10 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v.v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v.v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d.ui
-            else -> vStr.ui
+            else -> Uint(vStr.i) // additional wrapping to overcome numbers with leading minus
         }
     }
 
@@ -2310,8 +2320,7 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d.L
             else -> vStr.L
@@ -2324,11 +2333,10 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v.v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v.v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d.ul
-            else -> vStr.ul
+            else -> Ulong(vStr.L) // additional wrapping to overcome numbers with leading minus
         }
     }
 
@@ -2338,8 +2346,7 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d.f
             else -> vStr.replace(',', '.').f
@@ -2352,8 +2359,7 @@ internal interface templateFunctions {
         if (fmt.getOrNul(fmtStart + 0) != '%' || fmt.getOrNul(fmtStart + 1) == '%') // Don't apply if the value is not visible in the format string
             return v
         val fmtEnd = parseFormatFindEnd(fmt, fmtStart)
-        val vStr = fmt.substring(fmtStart, fmtEnd).format(v)
-        vStr.trimStart()
+        val vStr = fmt.substring(fmtStart, fmtEnd).format(v).trimStart()
         return when (dataType) {
             DataType.Float, DataType.Double -> vStr.replace(',', '.').d
             else -> vStr.replace(',', '.').d
