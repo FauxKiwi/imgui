@@ -108,7 +108,7 @@ class IO(sharedFontAtlas: FontAtlas? = null) {
     var configViewportsNoAutoMerge =     false
     /** Disable default OS task bar icon flag for secondary viewports. When a viewport doesn't want a task bar icon, ImGuiViewportFlags_NoTaskBarIcon will be set on it. */
     var configViewportsNoTaskBarIcon =   false
-    /** [BETA] Disable default OS window decoration flag for secondary viewports. When a viewport doesn't want window decorations, ImGuiViewportFlags_NoDecoration will be set on it. Enabling decoration can create subsequent issues at OS levels (e.g. minimum window size). */
+    /** Disable default OS window decoration flag for secondary viewports. When a viewport doesn't want window decorations, ImGuiViewportFlags_NoDecoration will be set on it. Enabling decoration can create subsequent issues at OS levels (e.g. minimum window size). */
     var configViewportsNoDecoration =    true
     /** Disable default OS parenting to main viewport for secondary viewports. By default, viewports are marked with ParentViewportId = <main_viewport>, expecting the platform back-end to setup a parent/child relationship between the OS windows (some back-end may ignore this). Set to true if you want the default to be 0, then all viewports will be top-level OS windows. */
     var configViewportsNoDefaultParent = false
@@ -137,8 +137,8 @@ class IO(sharedFontAtlas: FontAtlas? = null) {
     /** [BETA] Set to true to only allow moving windows when clicked+dragged from the title bar. Windows without a title bar are not affected. */
     var configWindowsMoveFromTitleBarOnly = false
 
-    /** [BETA] Compact window memory usage when unused. Set to -1.0f to disable. */
-    var configWindowsMemoryCompactTimer = 60f
+    /** [BETA] Free transient windows/tables memory buffers when unused for given amount of time. Set to -1.0f to disable. */
+    var configMemoryCompactTimer = 60f
 
     //------------------------------------------------------------------
     // User Functions
@@ -168,14 +168,6 @@ class IO(sharedFontAtlas: FontAtlas? = null) {
 //    // (default to posix malloc/free)
 //    void*       (*MemAllocFn)(size_t sz);
 //    void        (*MemFreeFn)(void* ptr);
-//
-    // TODO remove
-//    // Optional: Notify OS Input Method Editor of the screen position of your cursor for text input position (e.g. when using Japanese/Chinese IME in Windows)
-//    // (default to use native imm32 api on Windows)
-//    val imeSetInputScreenPosFn: ((x: Int, y: Int) -> Unit)? = imeSetInputScreenPosFn_Win32.takeIf { Platform.get() == Platform.WINDOWS }
-//
-//    /** (Windows) Set this to your HWND to get automatic IME cursor positioning.    */
-//    var imeWindowHandle: HWND = HWND(MemoryUtil.NULL)
 
     //------------------------------------------------------------------
     // Input - Fill before calling NewFrame()

@@ -20,6 +20,7 @@ import imgui.ImGui.getBackgroundDrawList
 import imgui.ImGui.getColorU32
 import imgui.ImGui.getForegroundDrawList
 import imgui.ImGui.io
+import imgui.ImGui.gcCompactTransientMiscBuffers
 import imgui.ImGui.isMouseDown
 import imgui.ImGui.keepAliveID
 import imgui.ImGui.mergedKeyModFlags
@@ -39,6 +40,8 @@ import imgui.internal.DrawData
 import imgui.internal.classes.Rect
 import imgui.internal.classes.Window
 import imgui.internal.lengthSqr
+import imgui.internal.*
+import imgui.internal.sections.ItemFlag
 import imgui.internal.sections.or
 import imgui.static.*
 import kool.lim
@@ -214,7 +217,7 @@ interface main {
 
         // Mark all windows as not visible and compact unused memory.
         assert(g.windowsFocusOrder.size == g.windows.size)
-        val memoryCompactStartTime = if (io.configWindowsMemoryCompactTimer >= 0f) g.time.f - io.configWindowsMemoryCompactTimer else Float.MAX_VALUE
+        val memoryCompactStartTime = if (g.gcCompactAll || io.configMemoryCompactTimer < 0f) Float.MAX_VALUE else g.time.f - io.configMemoryCompactTimer
         g.windows.forEach {
             it.wasActive = it.active
             it.beginCount = 0
@@ -225,6 +228,9 @@ interface main {
             if (!it.wasActive && !it.memoryCompacted && it.lastTimeActive < memoryCompactStartTime)
                 it.gcCompactTransientBuffers()
         }
+        if (g.gcCompactAll)
+            gcCompactTransientMiscBuffers()
+        g.gcCompactAll = false
 
         // Closing the focused window restore focus to the first active root window in descending z-order
         if (g.navWindow?.wasActive == false)
@@ -234,6 +240,9 @@ interface main {
         // But in order to allow the user to call NewFrame() multiple times without calling Render(), we are doing an explicit clear.
         g.currentWindowStack.clear()
         g.beginPopupStack.clear()
+        g.itemFlagsStack.clear()
+        g.itemFlagsStack += ItemFlag.Default_.i
+        g.groupStack.clear()
         closePopupsOverWindow(g.navWindow, false)
 
         // Docking
@@ -429,6 +438,9 @@ interface main {
                     if (viewport === g.navWindowingListWindow?.viewport)
                         continue
                     if (viewport === g.navWindowingTargetAnim?.viewport)
+                        continue
+                    val vieportWindow = viewport.window
+                    if (vieportWindow != null && modalWindow != null && vieportWindow isAbove modalWindow)
                         continue
                     val drawList = getForegroundDrawList(viewport)
                     val dimBgCol = getColorU32(if (dimBgForModal) Col.ModalWindowDimBg else Col.NavWindowingDimBg, g.dimBgRatio)

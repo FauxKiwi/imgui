@@ -156,8 +156,10 @@ interface windows {
         // Add to stack
         // We intentionally set g.CurrentWindow to NULL to prevent usage until when the viewport is set, then will call SetCurrentWindow()
         g.currentWindowStack += window
+        g.currentWindow = window
+        window.dc.stackSizesOnBegin.setToCurrentState()
         g.currentWindow = null
-        errorCheckBeginEndCompareStacksSize(window, true)
+
         if (flags has Wf._Popup) {
             val popupRef = g.openPopupStack[g.beginPopupStack.size]
             popupRef.window = window
@@ -424,19 +426,26 @@ interface windows {
                 // Update common viewport flags
                 val viewportFlagsToClear = Vf.TopMost or Vf.NoTaskBarIcon or Vf.NoDecoration or Vf.NoRendererClear
                 var viewportFlags = viewport.flags wo viewportFlagsToClear
+                val isModal = flags has Wf._Modal
                 val isShortLivedFloatingWindow = flags has (Wf._ChildMenu or Wf._Tooltip or Wf._Popup)
                 if (flags has Wf._Tooltip)
                     viewportFlags = viewportFlags or Vf.TopMost
-                if (io.configViewportsNoTaskBarIcon || isShortLivedFloatingWindow)
+                if ((io.configViewportsNoTaskBarIcon || isShortLivedFloatingWindow) && !isModal)
                     viewportFlags = viewportFlags or Vf.NoTaskBarIcon
                 if (io.configViewportsNoDecoration || isShortLivedFloatingWindow)
                     viewportFlags = viewportFlags or Vf.NoDecoration
+
+                // Not correct to set modal as topmost because:
+                // - Because other popups can be stacked above a modal (e.g. combo box in a modal)
+                // - ImGuiViewportFlags_TopMost is currently handled different in backends: in Win32 it is "appear top most" whereas in GLFW and SDL it is "stay topmost"
+                //if (flags & ImGuiWindowFlags_Modal)
+                //    viewport_flags |= ImGuiViewportFlags_TopMost;
 
                 // For popups and menus that may be protruding out of their parent viewport, we enable _NoFocusOnClick so that clicking on them
                 // won't steal the OS focus away from their parent window (which may be reflected in OS the title bar decoration).
                 // Setting _NoFocusOnClick would technically prevent us from bringing back to front in case they are being covered by an OS window from a different app,
                 // but it shouldn't be much of a problem considering those are already popups that are closed when clicking elsewhere.
-                if (isShortLivedFloatingWindow && flags hasnt Wf._Modal)
+                if (isShortLivedFloatingWindow && !isModal)
                     viewportFlags = viewportFlags or (Vf.NoFocusOnAppearing or Vf.NoFocusOnClick)
 
                 // We can overwrite viewport flags using ImGuiWindowClass (advanced users)
@@ -770,13 +779,8 @@ interface windows {
 
                 dc.itemWidth = itemWidthDefault
                 dc.textWrapPos = -1f // disabled
-                dc.itemFlagsStack.clear()
                 dc.itemWidthStack.clear()
                 dc.textWrapPosStack.clear()
-                dc.groupStack.clear()
-
-                dc.itemFlags = parentWindow?.dc?.itemFlags ?: If.Default_.i
-                if (parentWindow != null) dc.itemFlagsStack += dc.itemFlags
 
                 if (autoFitFrames.x > 0) autoFitFrames.x--
                 if (autoFitFrames.y > 0) autoFitFrames.y--
@@ -847,12 +851,15 @@ interface windows {
             setCurrentWindow(window)
         }
 
+        // Pull/inherit current state
+        window.dc.itemFlags = g.itemFlagsStack.last() // Inherit from shared stack
+        window.dc.navFocusScopeIdCurrent = if(flags has Wf._ChildWindow) parentWindow!!.dc.navFocusScopeIdCurrent else 0 // Inherit from parent only // -V595
+
         if (flags hasnt Wf._DockNodeHost)
             pushClipRect(window.innerClipRect.min, window.innerClipRect.max, true)
 
         // Clear 'accessed' flag last thing (After PushClipRect which will set the flag. We want the flag to stay false when the default "Debug" window is unused)
-        if (firstBeginOfTheFrame) window.writeAccessed = false
-
+        window.writeAccessed = false
         window.beginCount++
         g.nextWindowData.clearFlags()
 
@@ -937,8 +944,9 @@ interface windows {
 
         // Pop from window stack
         g.currentWindowStack.pop()
-        if (window.flags has Wf._Popup) g.beginPopupStack.pop()
-        errorCheckBeginEndCompareStacksSize(window, false)
+        if (window.flags has Wf._Popup)
+            g.beginPopupStack.pop()
+        window.dc.stackSizesOnBegin.compareWithCurrentState()
         setCurrentWindow(g.currentWindowStack.lastOrNull())
         g.currentWindow?.let { setCurrentViewport(it, it.viewport) }
 

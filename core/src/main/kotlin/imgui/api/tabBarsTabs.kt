@@ -38,14 +38,21 @@ interface tabBarsTabs {
         if (window.skipItems) return
 
         val tabBar = g.currentTabBar ?: error("Mismatched BeginTabBar()/EndTabBar()!")
-        if (tabBar.wantLayout) // Fallback in case no TabItem have been submitted
+
+        // Fallback in case no TabItem have been submitted
+        if (tabBar.wantLayout)
             tabBar.layout()
 
         // Restore the last visible height if no tab is visible, this reduce vertical flicker/movement when a tabs gets removed without calling SetTabItemClosed().
         val tabBarAppearing = tabBar.prevFrameVisible + 1 < g.frameCount
-        if (tabBar.visibleTabWasSubmitted || tabBar.visibleTabId == 0 || tabBarAppearing) tabBar.lastTabContentHeight =
-            (window.dc.cursorPos.y - tabBar.barRect.max.y) max 0f
-        else window.dc.cursorPos.y = tabBar.barRect.max.y + tabBar.lastTabContentHeight
+        if (tabBar.visibleTabWasSubmitted || tabBar.visibleTabId == 0 || tabBarAppearing) {
+            tabBar.currTabsContentsHeight = (window.dc.cursorPos.y - tabBar.barRect.max.y) max tabBar.currTabsContentsHeight
+            window.dc.cursorPos.y = tabBar.barRect.max.y + tabBar.currTabsContentsHeight
+        }
+        else
+            window.dc.cursorPos.y = tabBar.barRect.max.y + tabBar.prevTabsContentsHeight
+        if (tabBar.beginCount > 1)
+            window.dc.cursorPos put tabBar.backupCursorPos
 
         if (tabBar.flags hasnt TabBarFlag._DockNode) popID()
 
@@ -83,7 +90,8 @@ interface tabBarsTabs {
         val tabBar = g.currentTabBar ?: error("Needs to be called between BeginTabBar() and EndTabBar()!")
         assert(tabBar.lastTabItemIdx >= 0)
         val tab = tabBar.tabs[tabBar.lastTabItemIdx]
-        if (tab.flags hasnt TabItemFlag.NoPushId) window.idStack.pop()
+        if (tab.flags hasnt TabItemFlag.NoPushId)
+            popID()
     }
 
     /** create a Tab behaving like a button. return true when clicked. cannot be selected in the tab bar. */
@@ -108,12 +116,12 @@ interface tabBarsTabs {
         val tabBar = g.currentTabBar
         val isWithinManualTabBar = tabBar != null && tabBar.flags hasnt TabBarFlag._DockNode
         if (isWithinManualTabBar) {
-            val tabId = tabBar!! calcTabID label
+            val tabId = tabBar!!.calcTabID(label, null)
             tabBar.findTabByID(tabId)?.wantClose = true // Will be processed by next call to TabBarLayout()
         } else findWindowByName(label)?.let { window ->
             if (window.dockIsActive)
                 window.dockNode?.let { node ->
-                val tabId = node.tabBar!! calcTabID label
+                val tabId = node.tabBar!!.calcTabID(label, window)
                 node.tabBar!! removeTab tabId
                 window.dockTabWantClose = true
             }
